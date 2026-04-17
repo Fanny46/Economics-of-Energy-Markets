@@ -134,6 +134,7 @@ def load_prices(price_folder):
 
     return pd.concat(prices_list, ignore_index=True)
 
+
 # ── Calcul des flux monétaires ────────────────────────────────────────────────
 
 def compute_monetary_flows(flows, prices):
@@ -178,7 +179,7 @@ def compute_monetary_flows(flows, prices):
     return df
 
 def aggregate_yearly(df):
-    yearly = (
+    yearly_report = (
         df.groupby(["year", "partner"])
         .agg(
             export_twh=("energy_mwh",
@@ -196,7 +197,7 @@ def aggregate_yearly(df):
         .reset_index()
         .rename(columns={"partner": "country"})
     )
-    return yearly
+    return yearly_report
 
 
 # ── Flows maps ────────────────────────────────────────────────────────────────

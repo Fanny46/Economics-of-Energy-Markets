@@ -4,7 +4,6 @@ flows_folder = "./data/physical_flows"
 price_folder = "./data/energy_prices"
 
 def gen_yearly_flows(price_folder=price_folder, flows_folder=flows_folder):
-
     prices = load_prices(price_folder)
     flows = load_flows(flows_folder)
     flows_money = compute_monetary_flows(flows, prices)
