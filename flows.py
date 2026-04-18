@@ -9,89 +9,6 @@ import numpy as np
 
 # ── Load prices and flows ──────────────────────────────────────────────────
 
-def load_flows(folder):
-
-    flows_list = []
-
-    # mapping ENTSO-E zones → pays
-    zone_map = {
-        "FR": "France",
-        "BE": "Belgium",
-        "CH": "Switzerland",
-        "DE-LU": "Germany",
-        "DE-AT-LU": "Germany",
-        "ES": "Spain",
-        "GB": "Great Britain",
-        "GB(ElecLink)": "Great Britain",
-        "GB(IFA)": "Great Britain",
-        "GB(IFA2)": "Great Britain",
-        "IT-North": "Italy-North",
-        "IT-North-FR": "Italy-North",
-    }
-
-    for file in os.listdir(folder):
-        if not file.endswith(".csv"):
-            continue
-
-        path = os.path.join(folder, file)
-        df = pd.read_csv(path)
-
-        # datetime
-        df["datetime"] = pd.to_datetime(
-            df["MTU"]
-                .str.split(" - ").str[0]      # début intervalle
-                .str.replace(r"\s*\(.*\)", "", regex=True),  # enlève (CET) et (CEST)
-            dayfirst=True,
-            errors="coerce"
-        )
-
-        # extract zones
-        df["out_zone"] = df["Out Area"].str.replace("BZN|", "", regex=False)
-        df["in_zone"] = df["In Area"].str.replace("BZN|", "", regex=False)
-
-        # map → country
-        df["from_country"] = df["out_zone"].map(zone_map)
-        df["to_country"] = df["in_zone"].map(zone_map)
-
-        # numeric flow
-        df["flow_mw"] = pd.to_numeric(
-            df["Physical Flow (MW)"],
-            errors="coerce"
-        )
-
-        # remove n/e
-        df = df.dropna(subset=["flow_mw"])
-
-        # garder seulement flux avec la France
-        df = df[
-            (df["from_country"] == "France") |
-            (df["to_country"] == "France")
-        ]
-
-        # partenaire = autre pays
-        df["partner"] = df.apply(
-            lambda x:
-            x["to_country"]
-            if x["from_country"] == "France"
-            else x["from_country"],
-            axis=1
-        )
-
-        flows_list.append(
-            df[[
-                "datetime",
-                "from_country",
-                "to_country",
-                "partner",
-                "flow_mw"
-            ]]
-        )
-
-    flows = pd.concat(flows_list, ignore_index=True)
-
-    return flows
-
-
 def load_prices(price_folder):
 
     files = Path(price_folder).glob("Energy prices *.csv")
@@ -135,7 +52,116 @@ def load_prices(price_folder):
     return pd.concat(prices_list, ignore_index=True)
 
 
-# ── Calcul des flux monétaires ────────────────────────────────────────────────
+def load_entsoe_folder(folder_path, value_type="flow"):
+    """
+    value_type : "flow" ou "capacity"
+    """
+    all_df = []
+    
+    zone_map = {
+        "FR": "France",
+        "BE": "Belgium",
+        "CH": "Switzerland",
+        "DE-LU": "Germany",
+        "DE-AT-LU": "Germany",
+        "ES": "Spain",
+        "GB": "Great Britain",
+        "GB(ElecLink)": "Great Britain",
+        "GB(IFA)": "Great Britain",
+        "GB(IFA2)": "Great Britain",
+        "IT-North": "Italy-North",
+        "IT-North-FR": "Italy-North",
+    }
+
+    for fname in os.listdir(folder_path):
+        if not fname.endswith(".csv"):
+            continue
+
+        print("Lecture :", fname)
+        path = os.path.join(folder_path, fname)
+        df = pd.read_csv(path)
+
+        # ─────────────────────────────
+        # 1. détecter MTU
+        # ─────────────────────────────
+        if "MTU" in df.columns:
+            mtu_col = "MTU"
+        elif "MTU (CET/CEST)" in df.columns:
+            mtu_col = "MTU (CET/CEST)"
+        else:
+            print("MTU introuvable :", fname)
+            continue
+
+        df["datetime"] = pd.to_datetime(
+            df[mtu_col]
+                .astype(str)
+                .str.split(" - ").str[0]
+                .str.replace(r"\s*\(.*\)", "", regex=True),
+            dayfirst=True,
+            errors="coerce"
+        )
+
+        # ─────────────────────────────
+        # 2. colonne valeur
+        # ─────────────────────────────
+        if value_type == "flow":
+            value_col = "Physical Flow (MW)"
+        elif value_type == "capacity":
+            value_col = "Capacity (MW)"
+        else:
+            raise ValueError("value_type invalide")
+
+        df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+
+        # ─────────────────────────────
+        # 3. nettoyage zones
+        # ─────────────────────────────
+        # extract zones
+        df["from_country"] = df["Out Area"].str.replace("BZN|", "", regex=False).map(zone_map)
+        df["to_country"] = df["In Area"].str.replace("BZN|", "", regex=False).map(zone_map)
+
+        # garder interconnexions France
+        df = df[
+            (df["from_country"] == "France") |
+            (df["to_country"] == "France")
+        ]
+
+        df["partner"] = np.where(
+            df["from_country"] == "France",
+            df["to_country"],
+            df["from_country"]
+        )
+
+        # ─────────────────────────────
+        # 4. convention signe
+        # export FR = +
+        # import FR = -
+        # ─────────────────────────────
+        df["value_mw"] = np.where(
+            df["from_country"] == "France",
+            df[value_col],
+            -df[value_col]
+        )
+    
+        # année (depuis datetime → plus robuste)
+        df["year"] = df["datetime"].dt.year
+
+        all_df.append(df[[
+            "datetime",
+            "year",
+            "from_country",
+            "to_country",
+            "partner",
+            "value_mw"
+        ]])
+
+    if not all_df:
+        raise ValueError("Aucun fichier valide")
+
+    return pd.concat(all_df, ignore_index=True)
+
+
+# ── Computation of monetary flows ─────────────────────────────────────────────
 
 def compute_monetary_flows(flows, prices):
 
@@ -159,46 +185,59 @@ def compute_monetary_flows(flows, prices):
         how="left"
     )
 
-    df["energy_mwh"] = np.where(
-    df["from_country"] == "France",
-    df["flow_mw"],      # export France → +
-    -df["flow_mw"]      # import France → -
-)
-
     df["value_eur"] = (
-        df["energy_mwh"] * df["price_export"]
+        df["flow_mw"] * df["price_export"]
     )
 
     df["congestion_rent"] = (
-        df["energy_mwh"] *
+        df["flow_mw"] *
         (df["price_import"] - df["price_export"])
     )
 
-    df["year"] = df["datetime"].dt.year
-
     return df
 
+
 def aggregate_yearly(df):
+
+    def compute_stats(g):
+
+        total_flow = g.flow_mw.abs().sum()
+        total_capacity = g.capacity_mw.abs().sum()
+
+        util = (
+            total_flow / total_capacity
+            if total_capacity > 0
+            else np.nan
+        )
+
+        return pd.Series({
+
+            "export_twh":
+                g.loc[g.flow_mw > 0, "flow_mw"].sum()/1e6,
+
+            "import_twh":
+                -g.loc[g.flow_mw < 0, "flow_mw"].sum()/1e6,
+
+            "export_value":
+                g.loc[g.flow_mw > 0, "value_eur"].sum()/1e6,
+
+            "import_value":
+                -g.loc[g.flow_mw < 0, "value_eur"].sum()/1e6,
+
+            "utilization_rate": util,
+
+            "congestion_rent":
+                g["congestion_rent"].sum()/1e6
+        })
+
     yearly_report = (
         df.groupby(["year", "partner"])
-        .agg(
-            export_twh=("energy_mwh",
-                        lambda x: x[x > 0].sum()/1e6),
-
-            import_twh=("energy_mwh",
-                        lambda x: -x[x < 0].sum()/1e6),
-
-            export_value=("value_eur",
-                          lambda x: x[x > 0].sum()/1e6),
-
-            import_value=("value_eur",
-                          lambda x: -x[x < 0].sum()/1e6)
-        )
+        .apply(compute_stats)
         .reset_index()
         .rename(columns={"partner": "country"})
     )
-    return yearly_report
 
+    return yearly_report
 
 # ── Flows maps ────────────────────────────────────────────────────────────────
 
@@ -284,7 +323,7 @@ def create_flows_map(yearly_df, year, flow_type="physical"):
     """
     flow_type :
         - "physical"  → flux physiques (TWh)
-        - "monetary"  → flux monétaires (Md €)
+        - "monetary"  → flux monétaires (M€)
     """
 
     # ─────────────────────────────
@@ -298,7 +337,7 @@ def create_flows_map(yearly_df, year, flow_type="physical"):
     elif flow_type == "monetary":
         export_col = "export_value"
         import_col = "import_value"
-        unit = "Md€"
+        unit = "M€"
 
     else:
         raise ValueError("flow_type must be 'physical' or 'monetary'")
