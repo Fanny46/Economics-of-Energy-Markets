@@ -50,4 +50,4 @@ def gen_flows_maps():
 
 if __name__ == "__main__":
     gen_yearly_report()
-    gen_flows_maps()
+    # gen_flows_maps()

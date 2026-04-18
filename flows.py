@@ -64,6 +64,8 @@ def load_entsoe_folder(folder_path, value_type="flow"):
         "CH": "Switzerland",
         "DE-LU": "Germany",
         "DE-AT-LU": "Germany",
+        "DE(TransnetBW)": "Germany",
+        "DE(Amprion)": "Germany",
         "ES": "Spain",
         "GB": "Great Britain",
         "GB(ElecLink)": "Great Britain",
@@ -71,6 +73,8 @@ def load_entsoe_folder(folder_path, value_type="flow"):
         "GB(IFA2)": "Great Britain",
         "IT-North": "Italy-North",
         "IT-North-FR": "Italy-North",
+        "IT": "Italy-North",
+        "LU": "Germany",
     }
 
     for fname in os.listdir(folder_path):
@@ -116,9 +120,9 @@ def load_entsoe_folder(folder_path, value_type="flow"):
         # ─────────────────────────────
         # 3. nettoyage zones
         # ─────────────────────────────
-        # extract zones
-        df["from_country"] = df["Out Area"].str.replace("BZN|", "", regex=False).map(zone_map)
-        df["to_country"] = df["In Area"].str.replace("BZN|", "", regex=False).map(zone_map)
+        # extract zones : 
+        df["from_country"] = df["Out Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
+        df["to_country"] = df["In Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
 
         # garder interconnexions France
         df = df[
@@ -142,7 +146,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
             df[value_col],
             -df[value_col]
         )
-    
+
         # année (depuis datetime → plus robuste)
         df["year"] = df["datetime"].dt.year
 
@@ -157,7 +161,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
 
     if not all_df:
         raise ValueError("Aucun fichier valide")
-
+    
     return pd.concat(all_df, ignore_index=True)
 
 
