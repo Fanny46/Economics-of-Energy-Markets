@@ -1,8 +1,5 @@
 import os
-import re
-import math
 import pandas as pd
-import plotly.graph_objects as go
 from pathlib import Path
 import numpy as np
 
@@ -85,9 +82,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
         path = os.path.join(folder_path, fname)
         df = pd.read_csv(path)
 
-        # ─────────────────────────────
         # 1. détecter MTU
-        # ─────────────────────────────
         if "MTU" in df.columns:
             mtu_col = "MTU"
         elif "MTU (CET/CEST)" in df.columns:
@@ -105,9 +100,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
             errors="coerce"
         )
 
-        # ─────────────────────────────
         # 2. colonne valeur
-        # ─────────────────────────────
         if value_type == "flow":
             value_col = "Physical Flow (MW)"
         elif value_type == "capacity":
@@ -117,10 +110,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
 
         df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
 
-        # ─────────────────────────────
         # 3. nettoyage zones
-        # ─────────────────────────────
-        # extract zones : 
         df["from_country"] = df["Out Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
         df["to_country"] = df["In Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
 
@@ -136,11 +126,9 @@ def load_entsoe_folder(folder_path, value_type="flow"):
             df["from_country"]
         )
 
-        # ─────────────────────────────
         # 4. convention signe
         # export FR = +
         # import FR = -
-        # ─────────────────────────────
         df["value_mw"] = np.where(
             df["from_country"] == "France",
             df[value_col],
@@ -200,263 +188,153 @@ def compute_monetary_flows(flows, prices):
 
     return df
 
+# ── Aggregation yearly ─────────────────────────────────────────────────
 
 def aggregate_yearly(df):
 
     def compute_stats(g):
 
-        total_flow = g.flow_mw.abs().sum()
-        total_capacity = g.capacity_mw.abs().sum()
+        # 1. FLOWS COMPLETS
+        export_flow = g.loc[g.flow_mw > 0, "flow_mw"].sum()
+        import_flow = -g.loc[g.flow_mw < 0, "flow_mw"].sum()
 
-        util = (
-            total_flow / total_capacity
-            if total_capacity > 0
-            else np.nan
-        )
+        export_value = g.loc[g.flow_mw > 0, "value_eur"].sum()
+        import_value = -g.loc[g.flow_mw < 0, "value_eur"].sum()
 
+        export_rent = g.loc[g.flow_mw > 0, "congestion_rent"].sum()
+        import_rent = -g.loc[g.flow_mw < 0, "congestion_rent"].sum()
+
+        # 2. SUBSET VALIDE POUR CAPACITÉS
+        valid = g.dropna(subset=["capacity_mw"])
+        coverage = coverage = len(valid) / len(g)
+
+        if valid.empty:
+            export_cap = np.nan
+            import_cap = np.nan
+            export_util = np.nan
+            import_util = np.nan
+
+        else:
+            export_cap_series = valid.loc[valid.capacity_mw > 0, "capacity_mw"]
+            import_cap_series = -valid.loc[valid.capacity_mw < 0, "capacity_mw"]
+
+            export_cap = export_cap_series.sum()
+            import_cap = import_cap_series.sum()
+
+            # taux d'utilisation structurel
+            export_util = (
+                valid.loc[valid.flow_mw > 0, "flow_mw"].sum()
+                / export_cap
+                if export_cap > 0 else np.nan
+            )
+
+            import_util = (
+                -valid.loc[valid.flow_mw < 0, "flow_mw"].sum()
+                / import_cap
+                if import_cap > 0 else np.nan
+            )
+
+        # 3. OUTPUT
         return pd.Series({
 
-            "export_twh":
-                g.loc[g.flow_mw > 0, "flow_mw"].sum()/1e6,
+            "export_twh": export_flow / 1e6,
+            "import_twh": import_flow / 1e6,
 
-            "import_twh":
-                -g.loc[g.flow_mw < 0, "flow_mw"].sum()/1e6,
+            "export_value": export_value / 1e6,
+            "import_value": import_value / 1e6,
 
-            "export_value":
-                g.loc[g.flow_mw > 0, "value_eur"].sum()/1e6,
+            "capacity_coverage": coverage,
 
-            "import_value":
-                -g.loc[g.flow_mw < 0, "value_eur"].sum()/1e6,
+            "export_capacity_mwh": export_cap,
+            "import_capacity_mwh": import_cap,
 
-            "utilization_rate": util,
+            "export_utilization_rate": export_util,
+            "import_utilization_rate": import_util,
 
-            "congestion_rent":
-                g["congestion_rent"].sum()/1e6
+            "export_congestion_rent": export_rent / 1e6,
+            "import_congestion_rent": import_rent / 1e6,
         })
 
-    yearly_report = (
+    yearly = (
         df.groupby(["year", "partner"])
         .apply(compute_stats)
         .reset_index()
         .rename(columns={"partner": "country"})
     )
 
-    return yearly_report
-
-# ── Flows maps ────────────────────────────────────────────────────────────────
-
-COUNTRIES = {
-    "Great Britain": {
-        "nom": "GREAT BRITAIN",
-        "fr":  (48.8,  0.5),
-        "tgt": (50.8, -1.2),
-        "lbl": (52.0, -4.0),
-        "sym": ("triangle-up", "triangle-down"),
-    },
-    "Italy-North": {
-        "nom": "ITALY-NORTH",
-        "fr":  (44.5,  4.5),
-        "tgt": (44.5, 10.0),
-        "lbl": (43.0, 11.8),
-        "sym": ("triangle-right", "triangle-left"),
-    },
-    "Spain": {
-        "nom": "SPAIN",
-        "fr":  (44.0,  0.5),
-        "tgt": (41.0, -3.0),
-        "lbl": (40.0, -4.5),
-        "sym": ("triangle-sw", "triangle-ne"),
-    },
-    "Switzerland": {
-        "nom": "SWITZERLAND",
-        "fr":  (46.5,  4.0),
-        "tgt": (46.8,  8.5),
-        "lbl": (46.8, 11.8),
-        "sym": ("triangle-right", "triangle-left"),
-    },
-    "Belgium": {
-        "nom": "BELGIUM",
-        "fr":  (49.5,  3.5),
-        "tgt": (50.8,  4.3),
-        "lbl": (52.1,  3.0),
-        "sym": ("triangle-ne", "triangle-sw"),
-    },
-    "Germany": {
-        "nom": "GERMANY",
-        "fr":  (48.5,  5.0),
-        "tgt": (51.5,  9.5),
-        "lbl": (53.2, 11.0),
-        "sym": ("triangle-ne", "triangle-sw"),
-    },
-}
+    return yearly
 
 
-def _arrow_traces(fr, tgt, val_exp, val_imp, info, max_f, ecart=0.3, max_w=15):
-    """Génère les traces Scattergeo pour les flèches d'un pays."""
-    traces = []
-    dx, dy = tgt[1] - fr[1], tgt[0] - fr[0]
-    norm = math.hypot(dx, dy)
-    px, py = -dy / norm, dx / norm                 # vecteur perpendiculaire
+# ── Structural Congestion Index (SCI) ─────────────────────────────────────────
+def compute_structural_congestion(df):
 
-    for val, color, side, sym in [
-        (val_exp, "green",  1, info["sym"][0]),
-        (val_imp, "red",   -1, info["sym"][1]),
-    ]:
-        if val <= 0:
-            continue
-        w    = max(1, (val / max_f) * max_w)
-        lons = [fr[1]  + side * ecart * px, tgt[1] + side * ecart * px]
-        lats = [fr[0]  + side * ecart * py, tgt[0] + side * ecart * py]
-        # ligne
-        traces.append(go.Scattergeo(
-            lon=lons, lat=lats, mode="lines",
-            line=dict(width=w, color=color), hoverinfo="skip",
-        ))
-        # tête de flèche (→ bout côté tgt pour export, côté fr pour import)
-        tip_lon = lons[1] if color == "green" else lons[0]
-        tip_lat = lats[1] if color == "green" else lats[0]
-        traces.append(go.Scattergeo(
-            lon=[tip_lon], lat=[tip_lat], mode="markers",
-            marker=dict(symbol=sym, size=w + 8, color=color),
-            hoverinfo="skip",
-        ))
-    return traces
+    def stats(g):
 
+        valid = g.dropna(
+            subset=["flow_mw", "capacity_mw",
+                    "price_export", "price_import"]
+        )
 
-def create_flows_map(yearly_df, year, flow_type="physical"):
-    """
-    flow_type :
-        - "physical"  → flux physiques (TWh)
-        - "monetary"  → flux monétaires (M€)
-    """
+        # toujours retourner la même structure
+        if valid.empty:
+            return pd.Series({
+                "utilization": np.nan,
+                "avg_spread": np.nan,
+                "congestion_rent": np.nan,
+                "avg_price": np.nan
+            })
 
-    # ─────────────────────────────
-    # Choix du type de flux
-    # ─────────────────────────────
-    if flow_type == "physical":
-        export_col = "export_twh"
-        import_col = "import_twh"
-        unit = "TWh"
+        flow_abs = valid["flow_mw"].abs()
 
-    elif flow_type == "monetary":
-        export_col = "export_value"
-        import_col = "import_value"
-        unit = "M€"
+        # utilisation physique
+        utilization = (
+            flow_abs.sum()
+            / valid["capacity_mw"].abs().sum()
+        )
 
-    else:
-        raise ValueError("flow_type must be 'physical' or 'monetary'")
+        # price spread pondéré
+        spread = (
+            (flow_abs *
+             (valid["price_import"]
+              - valid["price_export"]).abs())
+            .sum()
+            / flow_abs.sum()
+        )
 
-    # dataframe année
-    df_year = yearly_df[yearly_df["year"] == year].copy()
+        congestion_rent = valid["congestion_rent"].sum()
 
-    # harmonisation noms colonnes
-    df_year["export"] = df_year[export_col]
-    df_year["import"] = df_year[import_col]
+        avg_price = (
+            valid[["price_import", "price_export"]]
+            .stack()
+            .mean()
+        )
 
-    # total France
-    totals = {
-        "export": df_year["export"].sum(),
-        "import": df_year["import"].sum(),
-    }
+        return pd.Series({
+            "utilization": utilization,
+            "avg_spread": spread,
+            "congestion_rent": congestion_rent,
+            "avg_price": avg_price
+        })
 
-    fig = go.Figure()
-
-    # normalisation largeur flèches
-    max_f = max(
-        1,
-        df_year["export"].max(),
-        df_year["import"].max()
+    # --- agrégation ---
+    out = (
+        df.groupby(["year", "partner"])
+          .apply(stats)
+          .reset_index()
     )
 
-    total_exp = 0
-    total_imp = 0
+    # --- normalisations ---
+    out["spread_norm"] = out["avg_spread"] / out["avg_price"]
 
-    # ─────────────────────────────
-    # Boucle pays
-    # ─────────────────────────────
-    for country, info in COUNTRIES.items():
-
-        row = df_year[df_year["country"] == country]
-
-        if row.empty:
-            continue
-
-        val_exp = row["export"].iloc[0]
-        val_imp = row["import"].iloc[0]
-
-        total_exp += val_exp
-        total_imp += val_imp
-
-        # ligne guide
-        fig.add_trace(go.Scattergeo(
-            lon=[info["lbl"][1], info["tgt"][1]],
-            lat=[info["lbl"][0], info["tgt"][0]],
-            mode="lines",
-            line=dict(width=1, color="rgba(100,100,100,0.2)"),
-            hoverinfo="skip",
-        ))
-
-        label = (
-            f"<b>{info['nom']}</b><br>"
-            f"<span style='color:green'>Exp: {val_exp:,.3f} {unit}</span><br>"
-            f"<span style='color:red'>Imp: {val_imp:,.3f} {unit}</span>"
-        ).replace(",", "\u202f")
-
-        fig.add_trace(go.Scattergeo(
-            lon=[info["lbl"][1]],
-            lat=[info["lbl"][0]],
-            mode="text",
-            text=[label],
-            textfont=dict(size=14, color="#0b1736"),
-            hoverinfo="skip",
-        ))
-
-        # flèches
-        for t in _arrow_traces(
-            info["fr"],
-            info["tgt"],
-            val_exp,
-            val_imp,
-            info,
-            max_f
-        ):
-            fig.add_trace(t)
-
-    # ─────────────────────────────
-    # Bilan France
-    # ─────────────────────────────
-    solde = totals["export"] - totals["import"]
-
-    bilan = (
-        f"<b>TOTAL FRANCE {year}</b><br>"
-        f"Exp: {totals['export']:,.3f} {unit}<br>"
-        f"Imp: {totals['import']:,.3f} {unit}<br>"
-        f"Net: {solde:,.3f} {unit}"
-    ).replace(",", "\u202f")
-
-    fig.add_trace(go.Scattergeo(
-        lon=[-5.5],
-        lat=[46.5],
-        mode="text",
-        text=[bilan],
-        textfont=dict(size=15, color="black"),
-        hoverinfo="skip",
-    ))
-
-    fig.update_layout(
-        geo=dict(
-            scope="europe",
-            showland=True,
-            landcolor="#e0f3f8",
-            countrycolor="white",
-            center=dict(lon=4.0, lat=47.0),
-            projection_scale=4,
-        ),
-        margin=dict(l=0, r=0, t=0, b=0),
-        height=600,
-        showlegend=False,
-        hovermode=False,
-        dragmode=False,
+    out["rent_norm"] = (
+        out["congestion_rent"].abs()
+        / out["congestion_rent"].abs().max()
     )
 
-    return fig
+    out["structural_congestion_index"] = (
+        out["utilization"]
+        * out["spread_norm"]
+        * out["rent_norm"]
+    )
+
+    return out

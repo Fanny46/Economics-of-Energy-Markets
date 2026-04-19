@@ -1,10 +1,13 @@
 from flows import *
+from maps import *
 
 flows_folder = "./data/flows"
 price_folder = "./data/energy_prices"
 capacities_folder = "./data/capacities"
 
+
 def gen_yearly_report():
+
     capacities = load_entsoe_folder(capacities_folder, "capacity")
     capacities.rename(columns={"value_mw":"capacity_mw"}, inplace=True)
 
@@ -28,13 +31,8 @@ def gen_yearly_report():
         validate="many_to_one"
     )
 
-    df["utilization_rate"] = (
-        df["flow_mw"].abs()
-        / df["capacity_mw"].replace(0, np.nan).abs()
-    )
-
-    # df.to_csv("hourly_report.csv", index=False)
-
+    df.to_csv("hourly_report.csv", index=False)
+    
     yearly_report = aggregate_yearly(df)
     yearly_report.to_csv("yearly_report.csv", index=False)
 
@@ -49,5 +47,10 @@ def gen_flows_maps():
 
 
 if __name__ == "__main__":
-    gen_yearly_report()
+    # gen_yearly_report()
     # gen_flows_maps()
+
+    # df = pd.read_csv("hourly_report.csv")
+    # congestion = compute_structural_congestion(df)
+    # histo = histogramme_congestion(congestion, 2021)
+    # histo.write_image("plots/histogram_congestion.png", scale=2)
