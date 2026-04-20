@@ -48,17 +48,21 @@ if __name__ == "__main__":
 
     for i in range(2021, 2025):
 
-        # histogramme nombre d'heures à forte utilisation
-        histo_hours = histogram_hours_high_utilization(hourly_report, i)
-        histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
+        # # histogramme nombre d'heures à forte utilisation
+        # histo_hours = histogram_hours(hourly_report, i)
+        # histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
 
-        # graphique de congestion
-        congestion_graph = plot_congestion_map(congestion, i)
-        congestion_graph.write_image(f"plots/spread_and_utilization/congestion_graph_{i}.png", scale=2)
+        # histogramme de la rente de congestion
+        histo_rent = histogram_congestion_rent(yearly_report, year=i)
+        histo_rent.write_image(f"plots/congestion_rent/histogram_congestion_rent_{i}.png", scale=2)
 
-        # histogramme structural congestion index
-        histo_congestion = histogramme_congestion(congestion, i)
-        histo_congestion.write_image(f"plots/structural_congestion/histogram_structural_congestion_{i}.png", scale=2)
+        # # graphique de congestion à deux axes
+        # congestion_graph = plot_congestion_map(congestion, i)
+        # congestion_graph.write_image(f"plots/spread_and_utilization/congestion_graph_{i}.png", scale=2)
+
+        # # histogramme structural congestion index
+        # histo_congestion = histogram_congestion(congestion, type="structural_congestion_index", year=i)
+        # histo_congestion.write_image(f"plots/structural_congestion/histogram_structural_congestion_{i}.png", scale=2)
 
         # # cartes de flux physiques et monétaires
         # fig_phy = create_flows_map(yearly_report, i, "physical")

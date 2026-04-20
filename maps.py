@@ -1,7 +1,6 @@
 import math
 import plotly.graph_objects as go
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 # ── Flows maps ────────────────────────────────────────────────────────────────
@@ -225,29 +224,7 @@ def create_flows_map(yearly_df, year, flow_type="physical"):
 
 # ── Histograms ────────────────────────────────────────────────────────────────
 
-def histogramme_congestion(df, year):
-    # Filtrer pour l'année donnée
-    df = df[df["year"] == year]
-
-    # Filtrer les lignes où congestion > 0
-    df_congestion = df[df["structural_congestion_index"] > 0]
-
-    # Partner en abscisse, congestion en ordonnée
-    fig = go.Figure(data=go.Bar(
-        x=df_congestion["partner"],
-        y=df_congestion["structural_congestion_index"],
-        marker_color='indianred'
-    ))
-    fig.update_layout(
-        title=f"Structural Congestion Index - {year}",
-        xaxis_title="Partner Country",
-        yaxis_title="Structural Congestion Index",
-        yaxis=dict(range=[0, df_congestion["structural_congestion_index"].max() * 1.2])
-    )
-    return fig
-
-
-def histogram_hours_high_utilization(df, year=None):
+def histogram_hours(df, year=None):
     # Filtrer pour l'année donnée
     if year is not None:
         df = df[df["year"] == year]
@@ -259,7 +236,9 @@ def histogram_hours_high_utilization(df, year=None):
     df["flow_direction"] = df["flow_mw"].apply(lambda x: "export" if x > 0 else "import")
     high_utilization = df[df["high_utilization"]]
     counts = high_utilization.groupby(["from_country", "to_country", "flow_direction"]).size().reset_index(name="hours_high_utilization")
+    
     fig = go.Figure()
+    
     for flow_direction, color in [("export", "green"), ("import", "red")]:
         df_direction = counts[counts["flow_direction"] == flow_direction]
         fig.add_trace(go.Bar(
@@ -273,6 +252,63 @@ def histogram_hours_high_utilization(df, year=None):
         xaxis_title="Interconnection",
         yaxis_title="Number of Hours",
         barmode='stack'
+    )
+    return fig
+
+
+def histogram_congestion_rent(df, year=None):
+    # Filtrer pour l'année donnée
+    if year is not None:
+        df = df[df["year"] == year]
+
+    # Pour chaque partenaire, afficher par deux couleurs différentes les barres de la rente de congestion à l'export et à l'import
+    df_congestion = df[(df["export_congestion_rent"] > 0) | (df["import_congestion_rent"] > 0)].copy()
+    df_congestion["congestion_rent"] = df_congestion["export_congestion_rent"].fillna(0) - df_congestion["import_congestion_rent"].fillna(0)
+
+    fig = go.Figure()
+    for direction, color in [("export_congestion_rent", "green"), ("import_congestion_rent", "red")]:
+        df_direction = df_congestion[df_congestion[direction] > 0]
+        fig.add_trace(go.Bar(
+            x=df_direction["country"],
+            y=df_direction[direction],
+            name=direction.replace("_", " ").capitalize(),
+            marker_color=color
+        ))
+    fig.update_layout(
+        title="Congestion rent by partner" + (f" ({year})" if year is not None else ""),
+        xaxis_title="Partner country",
+        yaxis_title="Congestion rent (M€)",
+        barmode='stack'
+    )
+    return fig
+
+
+def histogram_congestion(df, type="structural_congestion_index", year=None):
+    """Histogramme d'un indice de congestion par partenaire pour une année donnée.
+    
+    type :
+    * "structural_congestion_index" → index de congestion structurelle
+    * "congestion_rent" → rente de congestion
+    """
+
+    # Filtrer pour l'année donnée
+    if year is not None:
+        df = df[df["year"] == year]
+
+    # Filtrer les lignes où congestion > 0
+    df_congestion = df[df[type] > 0]
+
+    # Partner en abscisse, congestion en ordonnée
+    fig = go.Figure(data=go.Bar(
+        x=df_congestion["partner"],
+        y=df_congestion[type],
+        marker_color='indianred'
+    ))
+    fig.update_layout(
+        title=f"{type.replace('_', ' ').title()} - {year}",
+        xaxis_title="Partner Country",
+        yaxis_title=type.replace('_', ' ').title(),
+        yaxis=dict(range=[0, df_congestion[type].max() * 1.2])
     )
     return fig
 
@@ -318,8 +354,6 @@ def plot_congestion_map_old(congestion, year):
     )
     return fig
 
-import numpy as np
-import plotly.graph_objects as go
 
 def plot_congestion_map(congestion, year):
 
