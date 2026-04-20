@@ -1,5 +1,7 @@
 import math
 import plotly.graph_objects as go
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 # ── Flows maps ────────────────────────────────────────────────────────────────
@@ -221,6 +223,8 @@ def create_flows_map(yearly_df, year, flow_type="physical"):
     return fig
 
 
+# ── Histograms ────────────────────────────────────────────────────────────────
+
 def histogramme_congestion(df, year):
     # Filtrer pour l'année donnée
     df = df[df["year"] == year]
@@ -240,4 +244,228 @@ def histogramme_congestion(df, year):
         yaxis_title="Structural Congestion Index",
         yaxis=dict(range=[0, df_congestion["structural_congestion_index"].max() * 1.2])
     )
+    return fig
+
+
+def histogram_hours_high_utilization(df, year=None):
+    # Filtrer pour l'année donnée
+    if year is not None:
+        df = df[df["year"] == year]
+
+    # Compter le nombre d'heures avec taux d'utilisation > 80% pour chaque interconnexion
+    # Pour chaque interconnexion, indiquer avec deux couleurs différentes les heures d'exportation et d'importation à forte utilisation
+    df["utilization_rate"] = df["flow_mw"].abs() / df["capacity_mw"].abs()
+    df["high_utilization"] = df["utilization_rate"] > 0.8
+    df["flow_direction"] = df["flow_mw"].apply(lambda x: "export" if x > 0 else "import")
+    high_utilization = df[df["high_utilization"]]
+    counts = high_utilization.groupby(["from_country", "to_country", "flow_direction"]).size().reset_index(name="hours_high_utilization")
+    fig = go.Figure()
+    for flow_direction, color in [("export", "green"), ("import", "red")]:
+        df_direction = counts[counts["flow_direction"] == flow_direction]
+        fig.add_trace(go.Bar(
+            x=df_direction.apply(lambda row: f"{row['from_country']} → {row['to_country']}", axis=1),
+            y=df_direction["hours_high_utilization"],
+            name=flow_direction.capitalize(),
+            marker_color=color
+        ))
+    fig.update_layout(
+        title="Hours with Utilization Rate > 80%",
+        xaxis_title="Interconnection",
+        yaxis_title="Number of Hours",
+        barmode='stack'
+    )
+    return fig
+
+
+# ── Graphs ────────────────────────────────────────────────────────────────
+
+def plot_congestion_map_old(congestion, year):
+
+    df = congestion.loc[congestion["year"] == year].copy()
+
+    # sens dominant du flux
+    df["direction"] = np.where(
+        df["congestion_rent"] > 0,
+        "France exports",
+        "France imports"
+    )
+
+    # couleurs
+    colors = {
+        "France exports": "green",
+        "France imports": "red"
+    }
+    
+    # graphique
+    fig = go.Figure()
+    for direction, g in df.groupby("direction"):
+        fig.add_trace(go.Scatter(
+            x=g["utilization"],
+            y=g["avg_spread"],
+            mode="markers+text",
+            name=direction,
+            text=g["partner"],
+            textposition="top center",
+            marker=dict(size=12, color=colors[direction], opacity=0.8)
+        ))
+    fig.update_layout(
+        title=f"France congestion map ({year})",
+        xaxis_title="Average utilization rate",
+        yaxis_title="Average price spread (€/MWh)",
+        legend_title="Flow direction",
+        xaxis=dict(range=[0, 1]),
+        yaxis=dict(range=[0, df["avg_spread"].max() * 1.2])
+    )
+    return fig
+
+import numpy as np
+import plotly.graph_objects as go
+
+def plot_congestion_map(congestion, year):
+
+    df = congestion.loc[congestion["year"] == year].copy()
+
+    # sens dominant du flux
+    df["direction"] = np.where(
+        df["congestion_rent"] > 0,
+        "France exports",
+        "France imports"
+    )
+
+    colors = {
+        "France exports": "green",
+        "France imports": "red"
+    }
+
+    # --------------------------------------------------
+    # seuils séparant les cadrans
+    # --------------------------------------------------
+    util_thresh = df["utilization"].median()
+    spread_thresh = df["avg_spread"].median()
+
+    xmax = 1
+    ymax = df["avg_spread"].max() * 1.2
+
+    fig = go.Figure()
+
+    # --------------------------------------------------
+    # POINTS
+    # --------------------------------------------------
+    for direction, g in df.groupby("direction"):
+        fig.add_trace(go.Scatter(
+            x=g["utilization"],
+            y=g["avg_spread"],
+            mode="markers+text",
+            name=direction,
+            text=g["partner"],
+            textposition="top center",
+            marker=dict(
+                size=12,
+                color=colors[direction],
+                opacity=0.85
+            )
+        ))
+
+    # --------------------------------------------------
+    # QUADRANTS COLORÉS
+    # --------------------------------------------------
+    fig.update_layout(
+        shapes=[
+
+            # Bas gauche : marché intégré
+            dict(
+                type="rect",
+                x0=0, x1=util_thresh,
+                y0=0, y1=spread_thresh,
+                fillcolor="lightgreen",
+                opacity=0.15,
+                line_width=0,
+                layer="below"
+            ),
+
+            # Bas droit : arbitrage efficace
+            dict(
+                type="rect",
+                x0=util_thresh, x1=xmax,
+                y0=0, y1=spread_thresh,
+                fillcolor="lightblue",
+                opacity=0.15,
+                line_width=0,
+                layer="below"
+            ),
+
+            # Haut gauche : problème marché
+            dict(
+                type="rect",
+                x0=0, x1=util_thresh,
+                y0=spread_thresh, y1=ymax,
+                fillcolor="orange",
+                opacity=0.15,
+                line_width=0,
+                layer="below"
+            ),
+
+            # Haut droit : congestion structurelle
+            dict(
+                type="rect",
+                x0=util_thresh, x1=xmax,
+                y0=spread_thresh, y1=ymax,
+                fillcolor="red",
+                opacity=0.15,
+                line_width=0,
+                layer="below"
+            ),
+        ]
+    )
+
+    # --------------------------------------------------
+    # LIGNES DE SÉPARATION
+    # --------------------------------------------------
+    fig.add_vline(x=util_thresh, line_dash="dash")
+    fig.add_hline(y=spread_thresh, line_dash="dash")
+
+    # --------------------------------------------------
+    # LABELS DES CADRANS
+    # --------------------------------------------------
+    fig.add_annotation(
+        x=util_thresh/2,
+        y=spread_thresh/2,
+        text="Integrated market",
+        showarrow=False
+    )
+
+    fig.add_annotation(
+        x=(util_thresh+xmax)/2,
+        y=spread_thresh/2,
+        text="Efficient arbitrage",
+        showarrow=False
+    )
+
+    fig.add_annotation(
+        x=util_thresh/2,
+        y=(spread_thresh+ymax)/2,
+        text="Market barrier",
+        showarrow=False
+    )
+
+    fig.add_annotation(
+        x=(util_thresh+xmax)/2,
+        y=(spread_thresh+ymax)/2,
+        text="Structural congestion",
+        showarrow=False,
+        font=dict(size=13)
+    )
+
+    # --------------------------------------------------
+    # LAYOUT
+    # --------------------------------------------------
+    fig.update_layout(
+        title=f"France congestion map ({year})",
+        xaxis_title="Average utilization rate",
+        yaxis_title="Average price spread (€/MWh)",
+        legend_title="Flow direction",
+        xaxis=dict(range=[0, xmax]),
+        yaxis=dict(range=[0, ymax])
+    )
+
     return fig

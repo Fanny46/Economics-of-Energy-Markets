@@ -6,7 +6,7 @@ price_folder = "./data/energy_prices"
 capacities_folder = "./data/capacities"
 
 
-def gen_yearly_report():
+def gen_reports():
 
     capacities = load_entsoe_folder(capacities_folder, "capacity")
     capacities.rename(columns={"value_mw":"capacity_mw"}, inplace=True)
@@ -36,21 +36,32 @@ def gen_yearly_report():
     yearly_report = aggregate_yearly(df)
     yearly_report.to_csv("yearly_report.csv", index=False)
 
-
-def gen_flows_maps():
-    yearly_report = pd.read_csv("yearly_report.csv")
-    for i in range(2021, 2025):
-        fig_phy = create_flows_map(yearly_report, i, "physical")
-        fig_mon = create_flows_map(yearly_report, i, "monetary")
-        fig_phy.write_image(f"plots/flows_map_physical_{i}.png", scale=2)
-        fig_mon.write_image(f"plots/flows_map_monetary_{i}.png", scale=2)
+    congestion = compute_structural_congestion(df)
+    congestion.to_csv("congestion_yearly.csv", index=False)
 
 
 if __name__ == "__main__":
-    # gen_yearly_report()
-    # gen_flows_maps()
+    
+    congestion = pd.read_csv("congestion_yearly.csv")
+    hourly_report = pd.read_csv("hourly_report.csv")
+    yearly_report = pd.read_csv("yearly_report.csv")
 
-    # df = pd.read_csv("hourly_report.csv")
-    # congestion = compute_structural_congestion(df)
-    # histo = histogramme_congestion(congestion, 2021)
-    # histo.write_image("plots/histogram_congestion.png", scale=2)
+    for i in range(2021, 2025):
+
+        # histogramme nombre d'heures à forte utilisation
+        histo_hours = histogram_hours_high_utilization(hourly_report, i)
+        histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
+
+        # graphique de congestion
+        congestion_graph = plot_congestion_map(congestion, i)
+        congestion_graph.write_image(f"plots/spread_and_utilization/congestion_graph_{i}.png", scale=2)
+
+        # histogramme structural congestion index
+        histo_congestion = histogramme_congestion(congestion, i)
+        histo_congestion.write_image(f"plots/structural_congestion/histogram_structural_congestion_{i}.png", scale=2)
+
+        # # cartes de flux physiques et monétaires
+        # fig_phy = create_flows_map(yearly_report, i, "physical")
+        # fig_mon = create_flows_map(yearly_report, i, "monetary")
+        # fig_phy.write_image(f"plots/flows_maps/flows_map_physical_{i}.png", scale=2)
+        # fig_mon.write_image(f"plots/flows_maps/flows_map_monetary_{i}.png", scale=2)
