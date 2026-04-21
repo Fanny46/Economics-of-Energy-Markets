@@ -126,9 +126,7 @@ def load_entsoe_folder(folder_path, value_type="flow"):
             df["from_country"]
         )
 
-        # 4. convention signe
-        # export FR = +
-        # import FR = -
+        # 4. convention signe : export FR = +, import FR = -
         df["value_mw"] = np.where(
             df["from_country"] == "France",
             df[value_col],
@@ -183,7 +181,7 @@ def compute_monetary_flows(flows, prices):
 
     df["congestion_rent"] = (
         df["flow_mw"] *
-        (df["price_import"] - df["price_export"])
+        (df["price_import"] - df["price_export"]).abs()
     )
 
     return df

@@ -257,6 +257,7 @@ def histogram_hours(df, year=None):
 
 
 def histogram_congestion_rent(df, year=None):
+    """ Prend en entrée le yearly_report"""
     # Filtrer pour l'année donnée
     if year is not None:
         df = df[df["year"] == year]

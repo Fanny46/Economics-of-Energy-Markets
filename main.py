@@ -50,11 +50,11 @@ if __name__ == "__main__":
 
         # # histogramme nombre d'heures à forte utilisation
         # histo_hours = histogram_hours(hourly_report, i)
-        # histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
+        # # histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
 
-        # histogramme de la rente de congestion
-        histo_rent = histogram_congestion_rent(yearly_report, year=i)
-        histo_rent.write_image(f"plots/congestion_rent/histogram_congestion_rent_{i}.png", scale=2)
+        # # histogramme de la rente de congestion
+        # histo_rent = histogram_congestion_rent(yearly_report, year=i)
+        # histo_rent.write_image(f"plots/congestion_rent/histogram_congestion_rent_{i}.png", scale=2)
 
         # # graphique de congestion à deux axes
         # congestion_graph = plot_congestion_map(congestion, i)
@@ -69,3 +69,34 @@ if __name__ == "__main__":
         # fig_mon = create_flows_map(yearly_report, i, "monetary")
         # fig_phy.write_image(f"plots/flows_maps/flows_map_physical_{i}.png", scale=2)
         # fig_mon.write_image(f"plots/flows_maps/flows_map_monetary_{i}.png", scale=2)
+
+
+
+
+
+# Compter le nombre d'heures où la congestion rent est positive ET la France est exportatrice
+# hourly_report["congestion_rent_positive_and_exporting"] = (hourly_report["congestion_rent"] > 0) & (hourly_report["flow_mw"] > 0)
+# hours = hourly_report[(hourly_report["congestion_rent_positive_and_exporting"] == True)].shape[0]
+# print("nb of hours where congestion rent is positive and France is exporting:", hours)
+
+# hourly_report["congestion_rent_positive_and_importing"] = (hourly_report["congestion_rent"] > 0) & (hourly_report["flow_mw"] < 0)
+# hours = hourly_report[(hourly_report["congestion_rent_positive_and_importing"] == True)].shape[0]
+# print("nb of hours where congestion rent is positive and France is importing:", hours)
+
+# hourly_report["congestion_rent_negative_and_exporting"] = (hourly_report["congestion_rent"] < 0) & (hourly_report["flow_mw"] > 0)
+# hours = hourly_report[(hourly_report["congestion_rent_negative_and_exporting"] == True)].shape[0]
+# print("nb of hours where congestion rent is negative and France is exporting:", hours)
+
+# hourly_report["congestion_rent_negative_and_importing"] = (hourly_report["congestion_rent"] < 0) & (hourly_report["flow_mw"] < 0)
+# hours = hourly_report[(hourly_report["congestion_rent_negative_and_importing"] == True)].shape[0]
+# print("nb of hours where congestion rent is negative and France is importing:", hours)
+
+# # Afficher les export_congestion_rent et import_congestion_rent par pays partenaire de la France
+# congestion_by_partner = yearly_report.groupby("country").agg(
+#     export_congestion_rent=("export_congestion_rent", "sum"),
+#     import_congestion_rent=("import_congestion_rent", "sum")
+# ).reset_index()
+# print(congestion_by_partner)
+
+
+
