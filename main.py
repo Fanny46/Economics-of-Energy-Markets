@@ -6,13 +6,14 @@ flows_folder = "./data/flows"
 price_folder = "./data/energy_prices"
 capacities_folder = "./data/capacities"
 
+years = [2021, 2022, 2023, 2024]
 
 def gen_reports():
 
-    flows = load_entsoe_folder(flows_folder, "flow")
-    prices = load_prices(price_folder)
-    capacities = load_entsoe_folder(capacities_folder, "capacity")
-    daily_capacities = load_daily_capacity(capacities_folder)
+    flows = load_entsoe_folder(flows_folder, "flow", years)
+    prices = load_prices(price_folder, years)
+    capacities = load_entsoe_folder(capacities_folder, "capacity", years)
+    daily_capacities = load_daily_capacity(capacities_folder, years)
 
     hourly_report = merge_hourly_report(flows, prices, capacities, daily_capacities)
     yearly_report = aggregate_yearly(hourly_report)
@@ -30,23 +31,23 @@ if __name__ == "__main__":
     # hourly_report = pd.read_parquet("hourly_report.parquet")
     # yearly_report = pd.read_csv("yearly_report.csv")
 
-    # for i in range(2021, 2025):
+    # for i in years:
 
-        # # histogramme nombre d'heures à forte utilisation
+        # # histogram number of hours with high utilization
         # histo_hours = histogram_hours(hourly_report, i)
         # histo_hours.write_image(f"plots/hours_high_utilization/histogram_hours_high_utilization_{i}.png", scale=2)
 
-        # # histogramme de la rente de congestion
+        # # histogram congestion rent
         # histo_rent = histogram_congestion_rent(yearly_report, year=i)
         # histo_rent.write_image(f"plots/congestion_rent/histogram_congestion_rent_{i}.png", scale=2)
 
-        # graphique de congestion à deux axes
+        # # graph quadrants spread/utilization
         # congestion_graph = plot_congestion_map(yearly_report, i)
         # congestion_graph.write_image(f"plots/spread_and_utilization/congestion_graph_{i}.png", scale=2)
 
-        # # cartes de flux physiques et monétaires
+        # # physical and monetary flows maps
         # fig_phy = create_flows_map(yearly_report, i, "physical")
-        # fig_mon = create_flows_map(yearly_report, i, "monetary")
         # fig_phy.write_image(f"plots/flows_maps/flows_map_physical_{i}.png", scale=2)
+        # fig_mon = create_flows_map(yearly_report, i, "monetary")
         # fig_mon.write_image(f"plots/flows_maps/flows_map_monetary_{i}.png", scale=2)
 

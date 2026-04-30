@@ -12,7 +12,7 @@ This repository analyzes electricity transmission flows between France and its n
 
 ## Repository layout
 
-- `main.py`: entry point used to load data, build reports, and export results.
+- `main.py`: entry point used to load data, build reports, and export results for some years.
 - `src/load_files.py`: data ingestion helpers for prices, flows, hourly capacities, and daily capacities.
 - `src/gen_reports.py`: report-building logic, including monetary flow computation, hourly merging, and yearly aggregation.
 - `src/visualization.py`: Plotly-based charts and maps.
@@ -47,12 +47,7 @@ When the pipeline is executed, it produces:
 - `hourly_report.csv`: merged hourly dataset
 - `hourly_report.parquet`: parquet version of the hourly dataset
 - `yearly_report.csv`: yearly aggregation by partner country
-
-The plotting helpers in `src/visualization.py` can be used to export figures into the `plots/` subfolders.
-
-## Notes
-- The data loaders currently focus on years 2021 to 2024. Change the
-`src/load_files.py` to widen the panel. 
+- figures exported into the `plots/` subfolders.
 
 
 

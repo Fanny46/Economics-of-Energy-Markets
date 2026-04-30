@@ -26,8 +26,8 @@ zone_map = {
         "LU": "Germany",
 }
 
-def load_prices(price_folder):
-    years = [str(y) for y in range(2021, 2025)]
+def load_prices(price_folder, years=[2021, 2022, 2023, 2024]):
+    years = [str(y) for y in years]
     files = Path(price_folder).glob("Energy prices *.csv")
     prices_list = []
 
@@ -72,12 +72,12 @@ def load_prices(price_folder):
     return pd.concat(prices_list, ignore_index=True)
 
 
-def load_entsoe_folder(folder_path, value_type="flow"):
+def load_entsoe_folder(folder_path, value_type="flow", years=[2021, 2022, 2023, 2024]):
     """
     value_type : "flow" ou "capacity"
     """
     all_df = []
-    years = [str(y) for y in range(2021, 2025)]
+    years = [str(y) for y in years]
 
     for fname in os.listdir(folder_path):
         if not fname.endswith(".csv") or not any(year in fname for year in years) :
@@ -159,12 +159,12 @@ def load_entsoe_folder(folder_path, value_type="flow"):
     return pd.concat(all_df, ignore_index=True)
 
 
-def load_daily_capacity(folder_path):
+def load_daily_capacity(folder_path, years=[2021, 2022, 2023, 2024]):
     """ Charge files with daily capacities and merge them to extract relevant info (zones, date, capacity)"""
     
     # liste des fichiers
     path = folder_path + "/daily/*.csv"
-    years = [str(y) for y in range(2021, 2025)]
+    years = [str(y) for y in years]
     files = glob.glob(path)
 
     # lecture + concaténation
