@@ -53,9 +53,14 @@ def load_prices(price_folder, years=[2021, 2022, 2023, 2024]):
             format="%d/%m/%Y %H:%M:%S"
         )
 
-        df = df.rename(columns={
-            "Day-ahead Price (EUR/MWh)": "price"
-        })[["datetime", "price"]]
+        if 'Day-ahead Price (GBP/MWh)' in df.columns : #GB currency
+            df = df.rename(columns={
+            "Day-ahead Price (GBP/MWh)": "price"
+            })[["datetime", "price"]]
+        else : 
+            df = df.rename(columns={
+                "Day-ahead Price (EUR/MWh)": "price"
+            })[["datetime", "price"]]
 
         df["country"] = country
 
