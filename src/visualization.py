@@ -99,8 +99,8 @@ def create_flows_map(yearly_df, year, flow_type="physical"):
         unit = "TWh"
 
     elif flow_type == "monetary":
-        export_col = "export_value"
-        import_col = "import_value"
+        export_col = "export_value_M€"
+        import_col = "import_value_M€"
         unit = "M€"
 
     else:
@@ -263,11 +263,11 @@ def histogram_congestion_rent(df, year=None):
         df = df[df["year"] == year]
 
     # Pour chaque partenaire, afficher par deux couleurs différentes les barres de la rente de congestion à l'export et à l'import
-    df_congestion = df[(df["export_congestion_rent"] > 0) | (df["import_congestion_rent"] > 0)].copy()
-    df_congestion["congestion_rent"] = df_congestion["export_congestion_rent"].fillna(0) - df_congestion["import_congestion_rent"].fillna(0)
+    df_congestion = df[(df["export_abs_congestion_rent_M€"] > 0) | (df["import_abs_congestion_rent_M€"] > 0)].copy()
+    df_congestion["congestion_rent"] = df_congestion["export_abs_congestion_rent_M€"].fillna(0) - df_congestion["import_abs_congestion_rent_M€"].fillna(0)
 
     fig = go.Figure()
-    for direction, color in [("export_congestion_rent", "green"), ("import_congestion_rent", "red")]:
+    for direction, color in [("export_abs_congestion_rent_M€", "green"), ("import_abs_congestion_rent_M€", "red")]:
         df_direction = df_congestion[df_congestion[direction] > 0]
         fig.add_trace(go.Bar(
             x=df_direction["country"],
