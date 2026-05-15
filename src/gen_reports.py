@@ -79,6 +79,12 @@ def merge_hourly_report(flows, prices, capacities, daily_capacities):
     # calcul des flux monétaires
     flows_money = compute_monetary_flows(flows, prices)
 
+    # supprimer les lignes dupliquées
+    flows_money = flows_money.drop_duplicates(
+        subset=["datetime", "year", "from_country", "to_country"],
+        keep="first"
+    )
+
     # merge avec les capacités horaires
     hourly_report = flows_money.merge(
         capacities,

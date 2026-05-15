@@ -2,16 +2,19 @@ from src.load_files import *
 from src.gen_reports import *
 from src.visualization import *
 
-flows_folder = "./data/flows"
+flows_folder = "./data/commercial_flows"
 price_folder = "./data/energy_prices"
 capacities_folder = "./data/capacities"
 
 #years = [2021, 2022, 2023, 2024]
-years = [year for year in range(2014,2026)]
+years = [year for year in range(2016,2026)]
 
 def gen_reports():
 
-    flows = load_entsoe_folder(flows_folder, "flow", years)
+    flows = load_entsoe_folder(flows_folder, "comm_flow", years)
+
+    # Renommer la colonne day-ahead value (MW) en flow_mw
+    flows = flows.rename(columns={"day_ahead_mw": "flow_mw"})
     prices = load_prices(price_folder, years)
     capacities = load_entsoe_folder(capacities_folder, "capacity", years)
     daily_capacities = load_daily_capacity(capacities_folder, years)
