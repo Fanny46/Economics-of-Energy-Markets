@@ -6,7 +6,7 @@ import numpy as np
 # ── Flows maps ────────────────────────────────────────────────────────────────
 
 COUNTRIES = {
-    "Great Britain": {
+    "Great-Britain": {
         "nom": "GREAT BRITAIN",
         "fr":  (48.8,  0.5),
         "tgt": (50.8, -1.2),

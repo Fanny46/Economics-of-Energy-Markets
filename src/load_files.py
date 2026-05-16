@@ -16,10 +16,10 @@ zone_map = {
         "DE(TransnetBW)": "Germany",
         "DE(Amprion)": "Germany",
         "ES": "Spain",
-        "GB": "Great Britain",
-        "GB(ElecLink)": "Great Britain",
-        "GB(IFA)": "Great Britain",
-        "GB(IFA2)": "Great Britain",
+        "GB": "Great-Britain",
+        "GB(ElecLink)": "Great-Britain",
+        "GB(IFA)": "Great-Britain",
+        "GB(IFA2)": "Great-Britain",
         "IT-North": "Italy-North",
         "IT-North-FR": "Italy-North",
         "IT": "Italy-North",
@@ -65,7 +65,7 @@ def load_prices(price_folder, years=[2021, 2022, 2023, 2024]):
         df["country"] = country
 
         # Allemagne quart d'heure → horaire
-        df["datetime"] = df["datetime"].dt.floor("H")
+        df["datetime"] = df["datetime"].dt.floor("h")
 
         df = (
             df.groupby(["country", "datetime"], as_index=False)
@@ -76,28 +76,25 @@ def load_prices(price_folder, years=[2021, 2022, 2023, 2024]):
 
     return pd.concat(prices_list, ignore_index=True)
 
-
-def load_entsoe_folder(folder_path, value_type="flow", years=[2021, 2022, 2023, 2024]):
+def load_entsoe_folder(folder_path, value_type="comm_flow", years=[2021, 2022, 2023, 2024]):
     """
-    value_type : "flow" ou "capacity"
+    value_type : "phy_flow", "comm_flow", or "capacity"
     """
     all_df = []
     years = [str(y) for y in years]
 
     for fname in os.listdir(folder_path):
-        if not fname.endswith(".csv") or not any(year in fname for year in years) :
+        if not fname.endswith(".csv") or not any(year in fname for year in years):
             continue
 
         print("Lecture :", fname)
         path = os.path.join(folder_path, fname)
         df = pd.read_csv(path)
 
-        # 1. détecter MTU
-        if "MTU" in df.columns:
-            mtu_col = "MTU"
-        elif "MTU (CET/CEST)" in df.columns:
-            mtu_col = "MTU (CET/CEST)"
-        else:
+        # 1. Détecter la colonne MTU
+        mtu_candidates = ["MTU", "MTU (CET/CEST)", "MTU (UTC)"]
+        mtu_col = next((c for c in mtu_candidates if c in df.columns), None)
+        if mtu_col is None:
             print("MTU introuvable :", fname)
             continue
 
@@ -110,26 +107,45 @@ def load_entsoe_folder(folder_path, value_type="flow", years=[2021, 2022, 2023, 
             errors="coerce"
         )
 
-        # 2. colonne valeur
-        if value_type == "flow":
-            value_col = "Physical Flow (MW)"
-            col_name = "flow_mw"
+        # Conversion UTC → CET/CEST (uniquement si la source est UTC)
+        if mtu_col == "MTU (UTC)":
+            df["datetime"] = (
+                df["datetime"]
+                .dt.tz_localize("UTC")
+                .dt.tz_convert("Europe/Paris")
+                .dt.tz_localize(None)  # retire le tzinfo pour rester en naive datetime
+            )
+
+        # 2. Colonne(s) valeur selon value_type
+        if value_type == "phy_flow":
+            value_cols = {"flow_mw": "Physical Flow (MW)"}
         elif value_type == "capacity":
-            value_col = "Capacity (MW)"
-            col_name = "capacity_mw"
+            value_cols = {"capacity_mw": "Capacity (MW)"}
+        elif value_type == "comm_flow":
+            value_cols = {
+                "day_ahead_mw": "Day Ahead - Value (MW)",
+                "total_mw":     "Total - Value (MW)",
+            }
         else:
-            raise ValueError("value_type invalide")
+            raise ValueError(f"value_type invalide : {value_type!r}")
 
-        df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+        # Vérifier que les colonnes attendues sont présentes
+        missing = [c for c in value_cols.values() if c not in df.columns]
+        if missing:
+            print(f"  Colonnes manquantes {missing} dans {fname}, fichier ignoré.")
+            continue
 
-        # 3. nettoyage zones
+        for col_name, value_col in value_cols.items():
+            df[col_name] = pd.to_numeric(df[value_col], errors="coerce")
+
+        # 3. Nettoyage des zones
         df["from_country"] = df["Out Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
-        df["to_country"] = df["In Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
+        df["to_country"]   = df["In Area"].str.split("|", n=1, regex=False).str[1].map(zone_map)
 
-        # garder interconnexions France
+        # Garder uniquement les interconnexions France
         df = df[
             (df["from_country"] == "France") |
-            (df["to_country"] == "France")
+            (df["to_country"]   == "France")
         ]
 
         df["partner"] = np.where(
@@ -138,29 +154,23 @@ def load_entsoe_folder(folder_path, value_type="flow", years=[2021, 2022, 2023, 
             df["from_country"]
         )
 
-        # 4. garder les colonnes d'intérêt
-        df[col_name] = df[value_col]
+        # 4. Année et agrégation
         df["year"] = df["datetime"].dt.year
+        agg_cols = list(value_cols.keys())
 
-        # 5. Nettoyage des valeurs redondantes
         df = (
-            df.groupby(["datetime", "year", "from_country", "to_country", "partner"], as_index=False)
-            [col_name]
+            df.groupby(
+                ["datetime", "year", "from_country", "to_country", "partner"],
+                as_index=False
+            )[agg_cols]
             .sum()
         )
 
-        all_df.append(df[[
-            "datetime",
-            "year",
-            "from_country",
-            "to_country",
-            "partner",
-            col_name
-        ]])
+        all_df.append(df[["datetime", "year", "from_country", "to_country", "partner"] + agg_cols])
 
     if not all_df:
-        raise ValueError("Aucun fichier valide")
-    
+        raise ValueError("Aucun fichier valide trouvé.")
+
     return pd.concat(all_df, ignore_index=True)
 
 
