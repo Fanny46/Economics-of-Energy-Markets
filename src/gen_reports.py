@@ -97,11 +97,9 @@ def merge_hourly_report(flows, prices, capacities, daily_capacities):
     hourly_report = fill_hourly_with_daily(hourly_report, daily_capacities)
 
     # calcul du taux d'utilisation
-    hourly_report["utilization_rate"] = np.where(
-        hourly_report["capacity_mw"].notna(),
-        hourly_report["flow_mw"] / hourly_report["capacity_mw"],
-        np.nan
-    )
+    # calcul du taux d'utilisation
+    hourly_report["utilization_rate"] = (
+        hourly_report["flow_mw"] / hourly_report["capacity_mw"].replace(0, np.nan))
 
     return hourly_report
 
